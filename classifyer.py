@@ -21,8 +21,8 @@ def main():
         predictions.append(predition)
     endTime = time.time()
 
-    # with open(r"predictions/llama3.2(vanilla)", "w") as f:
-    #    f.writelines(predictions)
+    with open(r"predictions/llama3.2(vanilla)", "w") as f:
+        f.writelines(predictions)
     print(f"Total time {endTime - startTime} for model {simpleModelName}")
 
 
