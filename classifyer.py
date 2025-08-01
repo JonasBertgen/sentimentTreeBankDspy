@@ -8,44 +8,74 @@ def main():
     gemma3n = OllamaModel("gemma3n:e2b")
     phi3 = OllamaModel("phi3")
     llama3 = OllamaModel("llama3.2")
-    models = [gemma3n, phi3, llama3]
+    models = [gemma3n, llama3, phi3]
+    # modelEvaluatior = ModelEvaluator(models, "vanilla", 200)
+    # modelEvaluatior.makePredictions()
 
     # makePredictions(model, "test")
-    # print(eval("data/test.txt", f"predictions/{model.name}(vanilla)"))
-    exmaples = createDspExmaples("data/test.txt", 200)
-    for e in exmaples:
-        print(e)
+    for model in models:
+        print(model.name, eval("data/test.txt",
+              f"predictions/{model.name}(vanilla with 200)"))
 
 
-def makePredictions(model, dataset):
-    dictionary = {"verylow": 0, "low": 1,
-                  "neutral": 2, "high": 3, "veryhigh": 4}
-    dspy.configure(lm=model.model)
-    movieReviewSentimentClassifier = dspy.Predict(ReviewClasifier)
-    dataSet = loadTraining(f"data/{dataset}.txt")
-    predictions = []
-    startTime = time.time()
+class ModelEvaluator():
 
-    for review in dataSet:
-        predition = f"{review} ({dictionary[movieReviewSentimentClassifier(
-            movieReview=review).get("sentiment")]})"
-        predictions.append(predition)
-    endTime = time.time()
+    evalMap = {"verylow": 0, "low": 1,
+               "neutral": 2, "high": 3, "veryhigh": 4}
 
-    with open(f"predictions/{model.name}(vanilla)", "w") as f:
-        f.writelines("\n".join(predictions))
-    print(f"Total time {endTime - startTime} for model {model.name}")
-    return
+    dataset = "test"
+
+    def __init__(self, models, modelState, size):
+        self.models = models
+        self.modelState = modelState
+        self.examples = createDspExmaples(f"data/{self.dataset}.txt", size)
+        self.size = size
+
+    def makePredictions(self):
+        for model in self.models:
+            print(f"Started Model {model.name}")
+            startTime = time.time()
+            self.runModel(model)
+            endTime = time.time()
+            duration = (endTime - startTime)/60
+            print(f"Model {model.name} in {duration} min finished")
+
+    def getReviewSentiment(self, example, classifier):
+        for i in range(10):
+            try:
+                review = example.get("movieReview")
+                prediction = f"{
+                    review} ({self.evalMap[classifier(movieReview=review).get("sentiment")]})"
+                return prediction
+            except:
+                print(f"exception {i} in {review}")
+                pass
+        return "Exception"
+
+    def runModel(self, model):
+        dspy.configure(lm=model.model)
+        movieReviewSentimentClassifier = dspy.Predict(ReviewClasifier)
+        predictions = []
+
+        for exmaple in self.examples:
+            predictions.append(self.getReviewSentiment(
+                exmaple, movieReviewSentimentClassifier))
+
+        with open(f"predictions/{model.name}({self.modelState} with {self.size})", "w") as f:
+            f.writelines("\n".join(predictions))
+        return
 
 
-def eval(resultPath, goldPath):
-    def getLable(line): return int(re.findall(r"\((\d)\)", line)[-1])
-    result = [getLable(dataPoint) for dataPoint in loadDataSet(resultPath)]
-    gold = [getLable(dataPoint) for dataPoint in loadDataSet(goldPath)]
+def eval(goldPath, resultPath):
+    result = loadDataSet(resultPath)
+    gold = loadDataSet(goldPath)[:200]
     correctPredicted = 0
     for prediction, goldValue in zip(result, gold):
-        if prediction == goldValue:
-            correctPredicted += 1
+        try:
+            if splitDataPoint(prediction)[1] == splitDataPoint(goldValue)[1]:
+                correctPredicted += 1
+        except:
+            continue
     return correctPredicted/(len(gold))
 
 
@@ -55,6 +85,7 @@ def loadTraining(path):
 
 
 def splitDataPoint(dataPoint):
+    dataPoint = dataPoint.strip()
     review = dataPoint[:-5]
     lable = int(re.findall(r"\d", dataPoint[-5:])[0])
     return review, lable
