@@ -1,0 +1,32 @@
+{
+  "traces": [],
+  "train": [],
+  "demos": [
+    {
+      "augmented": true,
+      "movieReview": "The Rock is destined to be the st century 's new `` Conan '' and that he 's going to make a splash even greater than Arnold Schwarzenegger , Jean - Claud Van Damme or Steven Segal",
+      "sentiment": "high"
+    }
+  ],
+  "signature": {
+    "instructions": "Classify the sentiment of the movieReview.",
+    "fields": [
+      {
+        "prefix": "Movie Review:",
+        "description": "${movieReview}"
+      },
+      {
+        "prefix": "Sentiment:",
+        "description": "${sentiment}"
+      }
+    ]
+  },
+  "lm": null,
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.13",
+      "dspy": "2.6.27",
+      "cloudpickle": "3.1"
+    }
+  }
+}

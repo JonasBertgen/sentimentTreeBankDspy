@@ -1,4 +1,5 @@
 import dspy
+from dspy.teleprompt import MIPROv2
 from typing import Literal
 import time
 import re
@@ -9,13 +10,21 @@ def main():
     phi3 = OllamaModel("phi3")
     llama3 = OllamaModel("llama3.2")
     models = [gemma3n, llama3, phi3]
-    # modelEvaluatior = ModelEvaluator(models, "vanilla", 200)
-    # modelEvaluatior.makePredictions()
-
-    # makePredictions(model, "test")
+   # tp = dspy.MIPROv2(metric=getMetric(), auto="light", num_threads=1)
+   # opt = tp.compile(
+   #     sentimentAnaly, trainset=trainset[:5], max_bootstrapped_demos=2, max_labeled_demos=2)
     for model in models:
-        print(model.name, eval("data/test.txt",
-              f"predictions/{model.name}(vanilla with 200)"))
+        trained = trainingRun(model)
+        trained.save(f"./models/testrun-{model.name}.json")
+
+
+def trainingRun(model):
+    print(f"training run model {model.name} started")
+    dspy.configure(lm=model.model)
+    sentimentAnaly = dspy.Predict(ReviewClasifier)
+    trainset = createDspExamples("data/train.txt", 10)[:5]
+    print(f"training run model {model.name} ended")
+    return getMIPROv2Optimized(model.model, trainset, sentimentAnaly)
 
 
 class ModelEvaluator():
@@ -28,10 +37,11 @@ class ModelEvaluator():
     def __init__(self, models, modelState, size):
         self.models = models
         self.modelState = modelState
-        self.examples = createDspExmaples(f"data/{self.dataset}.txt", size)
+        self.examples = createDspExamples(f"data/{self.dataset}.txt", size)
         self.size = size
 
     def makePredictions(self):
+        count = 0
         for model in self.models:
             print(f"Started Model {model.name}")
             startTime = time.time()
@@ -41,14 +51,14 @@ class ModelEvaluator():
             print(f"Model {model.name} in {duration} min finished")
 
     def getReviewSentiment(self, example, classifier):
-        for i in range(10):
+        for i in range(3):
             try:
                 review = example.get("movieReview")
                 prediction = f"{
                     review} ({self.evalMap[classifier(movieReview=review).get("sentiment")]})"
                 return prediction
             except:
-                print(f"exception {i} in {review}")
+                # print(f"exception {i} in {review}")
                 pass
         return "Exception"
 
@@ -79,6 +89,22 @@ def eval(goldPath, resultPath):
     return correctPredicted/(len(gold))
 
 
+def getMIPROv2Optimized(model, trainset, toBeImp):
+    teleprompter = MIPROv2(
+        metric=getMetric, auto="light", prompt_model=model)
+    return teleprompter.compile(
+        toBeImp,
+        trainset=trainset,
+        requires_permission_to_run=False)
+
+
+def getMetric(example, pred, trace=None):
+    if example.sentiment == pred.sentiment:
+        return 1.0
+    else:
+        return 0.0
+
+
 def loadTraining(path):
     dataset = loadDataSet(path)
     return [splitDataPoint(dataPoint)[0] for dataPoint in dataset]
@@ -99,7 +125,7 @@ def loadDataSet(path):
     return dataset
 
 
-def createDspExmaples(pathFile, size):
+def createDspExamples(pathFile, size):
     dictionary = {0: "verylow", 1: "low",
                   2: "neutral", 3: "high", 4: "veryhigh"}
     exampleList = []
@@ -110,10 +136,12 @@ def createDspExmaples(pathFile, size):
 
     for entry in dataSet:
         dataLablePair = splitDataPoint(entry)
-        exampleList.append(dspy.Example(
+        example = dspy.Example(
             movieReview=dataLablePair[0],
-            sentiment=dictionary[dataLablePair[1]])
-        )
+            sentiment=dictionary[dataLablePair[1]]
+            # Specify that movieReview is the input field
+        ).with_inputs('movieReview')
+        exampleList.append(example)
     return exampleList
 
 
@@ -122,6 +150,12 @@ class ReviewClasifier(dspy.Signature):
     movieReview: str = dspy.InputField()
     sentiment: Literal["verylow", "low", "neutral",
                        "high", "veryhigh"] = dspy.OutputField()
+
+    # def predict(self, movieReview: str):
+    #    return self.predict(movieReview=movieReview)
+
+    def forward(self, input):
+        return self.predict(self, input=input)
 
 
 class OllamaModel():
